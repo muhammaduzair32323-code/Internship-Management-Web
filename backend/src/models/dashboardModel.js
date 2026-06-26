@@ -1,0 +1,91 @@
+const pool = require('../config/db');
+
+const DashboardModel = {
+  getStats: async () => {
+    const result = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM interns) AS total_interns,
+        (SELECT COUNT(*) FROM tasks) AS total_tasks,
+        (SELECT COUNT(*) FROM tasks WHERE status = 'completed') AS completed_tasks,
+        (SELECT COUNT(*) FROM tasks WHERE status = 'pending') AS pending_tasks
+    `);
+
+    const deptResult = await pool.query(`
+      SELECT department, COUNT(*) as count 
+      FROM interns 
+      GROUP BY department
+    `);
+
+    const taskStatusResult = await pool.query(`
+      SELECT status, COUNT(*) as count 
+      FROM tasks 
+      GROUP BY status
+    `);
+
+    const recentActivity = await pool.query(`
+      (
+        SELECT 
+          'task_assigned' as type,
+          t.title as message,
+          i.name as intern_name,
+          t.created_at as time
+        FROM tasks t
+        LEFT JOIN interns i ON t.intern_id = i.id
+        ORDER BY t.created_at DESC
+        LIMIT 5
+      )
+      UNION ALL
+      (
+        SELECT
+          'intern_added' as type,
+          'New intern added' as message,
+          name as intern_name,
+          created_at as time
+        FROM interns
+        ORDER BY created_at DESC
+        LIMIT 5
+      )
+      UNION ALL
+      (
+        SELECT
+          'attendance' as type,
+          CONCAT('Marked ', a.status) as message,
+          i.name as intern_name,
+          a.created_at as time
+        FROM attendance a
+        LEFT JOIN interns i ON a.intern_id = i.id
+        ORDER BY a.created_at DESC
+        LIMIT 5
+      )
+      ORDER BY time DESC
+      LIMIT 8
+    `);
+
+    const internPerformance = await pool.query(`
+      SELECT
+        i.id,
+        i.name,
+        i.department,
+        COUNT(t.id) as total_tasks,
+        COUNT(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks,
+        COUNT(a.id) as total_days,
+        COUNT(CASE WHEN a.status = 'present' THEN 1 END) as present_days
+      FROM interns i
+      LEFT JOIN tasks t ON t.intern_id = i.id
+      LEFT JOIN attendance a ON a.intern_id = i.id
+      GROUP BY i.id, i.name, i.department
+      ORDER BY completed_tasks DESC
+      LIMIT 5
+    `);
+
+    return {
+      stats: result.rows[0],
+      departmentDistribution: deptResult.rows,
+      taskStatusDistribution: taskStatusResult.rows,
+      recentActivity: recentActivity.rows,
+      internPerformance: internPerformance.rows,
+    };
+  },
+};
+
+module.exports = DashboardModel;

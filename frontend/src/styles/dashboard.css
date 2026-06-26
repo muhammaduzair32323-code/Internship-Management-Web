@@ -1,0 +1,138 @@
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1024px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 576px) {
+  .stat-grid { grid-template-columns: 1fr; }
+}
+
+
+.dashboard-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* ACTIVITY */
+.activity-list { display: flex; flex-direction: column; gap: 12px; }
+
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+.activity-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.activity-message {
+  font-size: 13px;
+  color: var(--text);
+  margin: 0 0 3px;
+}
+
+.activity-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* PERFORMANCE */
+.performance-list { display: flex; flex-direction: column; gap: 14px; }
+
+.performance-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.performance-item:hover { background: var(--bg); }
+
+.perf-avatar {
+  width: 36px;
+  height: 36px;
+  background: var(--primary-light);
+  color: var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.perf-info { flex: 1; min-width: 0; }
+
+.perf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.perf-name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+.perf-bars { display: flex; flex-direction: column; gap: 4px; }
+
+.perf-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.perf-bar-label {
+  font-size: 11px;
+  color: var(--muted);
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.perf-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  width: 30px;
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .dashboard-bottom { grid-template-columns: 1fr; }
+}

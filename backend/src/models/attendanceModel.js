@@ -1,0 +1,75 @@
+const pool = require('../config/db');
+
+const AttendanceModel = {
+  getAll: async ({ intern_id, date }) => {
+    let query = `
+      SELECT a.*, i.name as intern_name 
+      FROM attendance a 
+      LEFT JOIN interns i ON a.intern_id = i.id 
+      WHERE 1=1
+    `;
+    const params = [];
+    if (intern_id) { params.push(intern_id); query += ` AND a.intern_id = $${params.length}`; }
+    if (date) { params.push(date); query += ` AND a.date = $${params.length}`; }
+    query += ' ORDER BY a.date DESC';
+    const result = await pool.query(query, params);
+    return result.rows;
+  },
+
+  getWeeklySummary: async ({ intern_id, week_start, week_end }) => {
+    const result = await pool.query(`
+      SELECT 
+        i.id as intern_id,
+        i.name as intern_name,
+        i.department,
+        COALESCE(SUM(a.total_hours), 0) as total_hours,
+        COUNT(CASE WHEN a.status = 'present' THEN 1 END) as days_present,
+        COUNT(CASE WHEN a.status = 'absent' THEN 1 END) as days_absent
+      FROM interns i
+      LEFT JOIN attendance a ON a.intern_id = i.id
+        AND a.date BETWEEN $1 AND $2
+      WHERE ($3::int IS NULL OR i.id = $3)
+      GROUP BY i.id, i.name, i.department
+      ORDER BY total_hours DESC
+    `, [week_start, week_end, intern_id || null]);
+    return result.rows;
+  },
+
+  checkIn: async ({ intern_id, date, check_in }) => {
+    const result = await pool.query(`
+      INSERT INTO attendance (intern_id, date, status, check_in)
+      VALUES ($1, $2, 'present', $3)
+      ON CONFLICT (intern_id, date)
+      DO UPDATE SET check_in = $3, status = 'present'
+      RETURNING *
+    `, [intern_id, date, check_in]);
+    return result.rows[0];
+  },
+
+  checkOut: async ({ intern_id, date, check_out }) => {
+    const result = await pool.query(`
+      UPDATE attendance
+      SET 
+        check_out = $3,
+        total_hours = ROUND(
+          EXTRACT(EPOCH FROM ($3::time - check_in)) / 3600
+        , 2)
+      WHERE intern_id = $1 AND date = $2
+      RETURNING *
+    `, [intern_id, date, check_out]);
+    return result.rows[0];
+  },
+
+  mark: async ({ intern_id, date, status }) => {
+    const result = await pool.query(`
+      INSERT INTO attendance (intern_id, date, status)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (intern_id, date)
+      DO UPDATE SET status = EXCLUDED.status
+      RETURNING *
+    `, [intern_id, date, status]);
+    return result.rows[0];
+  },
+};
+
+module.exports = AttendanceModel;
