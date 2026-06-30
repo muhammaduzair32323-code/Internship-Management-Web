@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import internPortalService from '../../services/internPortalService';
 import Loader from '../../components/common/Loader';
 import { toast } from 'react-toastify';
 
@@ -53,9 +54,19 @@ const InternDashboard = () => {
   }, []);
 
   useEffect(() => {
-  const saved = localStorage.getItem('theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-}, []);
+    const saved = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+
+  useEffect(() => {
+    internPortalService.getFaceStatus()
+      .then(res => {
+        if (!res.data.data.face_verified) {
+          navigate('/intern/verify-identity');
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   if (loading) return <Loader />;
   if (!data) return null;
@@ -127,6 +138,5 @@ const InternDashboard = () => {
   );
 };
 
-
-
+export { InternNavbar };
 export default InternDashboard;

@@ -2,6 +2,121 @@ const router = require('express').Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const { internOnly } = require('../middleware/authMiddleware');
 const pool = require('../config/db');
+const InternModel = require('../models/internModel');
+const AttendanceModel = require('../models/attendanceModel');
+const { isWithinSines } = require('../utils/geo');
+const { isFaceMatch } = require('../utils/faceMatch');
+
+// Check face verification status
+router.get('/face/status', authMiddleware, internOnly, async (req, res, next) => {
+  try {
+    const data = await InternModel.getFaceDescriptor(req.user.id);
+    res.json({ success: true, data: { face_verified: data?.face_verified || false } });
+  } catch (err) { next(err); }
+});
+
+// First-time face setup
+router.post('/face/setup', authMiddleware, internOnly, async (req, res, next) => {
+  try {
+    const { descriptor } = req.body;
+    if (!descriptor || !Array.isArray(descriptor)) {
+      return res.status(400).json({ success: false, message: 'Valid face descriptor required' });
+    }
+    const result = await InternModel.saveFaceDescriptor(req.user.id, descriptor);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+});
+
+// Self check-in
+router.post('/attendance/check-in', authMiddleware, internOnly, async (req, res, next) => {
+  try {
+    const { descriptor, latitude, longitude } = req.body;
+    if (!descriptor || latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: 'Face descriptor and location required' });
+    }
+
+    const stored = await InternModel.getFaceDescriptor(req.user.id);
+    if (!stored?.face_verified) {
+      return res.status(400).json({ success: false, message: 'Please complete face verification first' });
+    }
+
+    const storedDescriptor = JSON.parse(stored.face_descriptor);
+    const { match, distance } = isFaceMatch(storedDescriptor, descriptor);
+    if (!match) {
+      return res.status(401).json({ success: false, message: 'Face does not match. Try again.' });
+    }
+
+    const locationCheck = isWithinSines(latitude, longitude);
+    if (!locationCheck.valid) {
+      return res.status(403).json({
+        success: false,
+        message: `You must be at SINES building to check in. You are ${locationCheck.distance}m away.`,
+      });
+    }
+
+    
+
+    const date = new Date().toISOString().slice(0, 10);
+    const time = new Date().toTimeString().slice(0, 8);
+
+    const record = await AttendanceModel.checkInSelf({
+      intern_id: req.user.id,
+      date,
+      check_in: time,
+      latitude,
+      longitude,
+    });
+
+    res.json({ success: true, data: record });
+  } catch (err) { next(err); }
+});
+
+// Self check-out
+router.post('/attendance/check-out', authMiddleware, internOnly, async (req, res, next) => {
+  try {
+    const { descriptor, latitude, longitude } = req.body;
+    if (!descriptor || latitude == null || longitude == null) {
+      return res.status(400).json({ success: false, message: 'Face descriptor and location required' });
+    }
+
+    const stored = await InternModel.getFaceDescriptor(req.user.id);
+    if (!stored?.face_verified) {
+      return res.status(400).json({ success: false, message: 'Please complete face verification first' });
+    }
+
+    const storedDescriptor = JSON.parse(stored.face_descriptor);
+    const { match } = isFaceMatch(storedDescriptor, descriptor);
+    if (!match) {
+      return res.status(401).json({ success: false, message: 'Face does not match. Try again.' });
+    }
+
+    const locationCheck = isWithinSines(latitude, longitude);
+    if (!locationCheck.valid) {
+      return res.status(403).json({
+        success: false,
+        message: `You must be at SINES building to check out. You are ${locationCheck.distance}m away.`,
+      });
+    }
+
+    const date = new Date().toISOString().slice(0, 10);
+    const time = new Date().toTimeString().slice(0, 8);
+
+    const record = await AttendanceModel.checkOutSelf({
+      intern_id: req.user.id,
+      date,
+      check_out: time,
+      latitude,
+      longitude,
+    });
+
+    if (!record) {
+      return res.status(400).json({ success: false, message: 'Check in first before checking out' });
+    }
+
+    res.json({ success: true, data: record });
+  } catch (err) { next(err); }
+});
+
 
 // Get own profile + tasks + attendance
 router.get('/me', authMiddleware, internOnly, async (req, res, next) => {

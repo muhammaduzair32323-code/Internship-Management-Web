@@ -12,6 +12,7 @@ import InternLogin from './pages/intern/InternLogin';
 import InternDashboard from './pages/intern/InternDashboard';
 import InternTasks from './pages/intern/InternTasks';
 import InternAttendance from './pages/intern/InternAttendance';
+import VerifyIdentity from './pages/intern/VerifyIdentity';
 import InternRoute from './components/common/InternRoute';
 import AIChatBot from './components/common/AIChatBot';
 
@@ -28,6 +29,7 @@ function App() {
         <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
         <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
         <Route path="/intern/login" element={<InternLogin />} />
+        <Route path="/intern/verify-identity" element={<InternRoute><VerifyIdentity /></InternRoute>} />
         <Route path="/intern/dashboard" element={<InternRoute><InternDashboard /></InternRoute>} />
         <Route path="/intern/tasks" element={<InternRoute><InternTasks /></InternRoute>} />
         <Route path="/intern/attendance" element={<InternRoute><InternAttendance /></InternRoute>} />

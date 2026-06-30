@@ -36,29 +36,30 @@ const AttendanceModel = {
   },
 
   checkIn: async ({ intern_id, date, check_in }) => {
-    const result = await pool.query(`
-      INSERT INTO attendance (intern_id, date, status, check_in)
-      VALUES ($1, $2, 'present', $3)
-      ON CONFLICT (intern_id, date)
-      DO UPDATE SET check_in = $3, status = 'present'
-      RETURNING *
-    `, [intern_id, date, check_in]);
-    return result.rows[0];
-  },
+  const result = await pool.query(`
+    INSERT INTO attendance (intern_id, date, status, check_in, source)
+    VALUES ($1, $2, 'present', $3, 'admin')
+    ON CONFLICT (intern_id, date)
+    DO UPDATE SET check_in = $3, status = 'present', source = 'admin'
+    RETURNING *
+  `, [intern_id, date, check_in]);
+  return result.rows[0];
+},
 
-  checkOut: async ({ intern_id, date, check_out }) => {
-    const result = await pool.query(`
-      UPDATE attendance
-      SET 
-        check_out = $3,
-        total_hours = ROUND(
-          EXTRACT(EPOCH FROM ($3::time - check_in)) / 3600
-        , 2)
-      WHERE intern_id = $1 AND date = $2
-      RETURNING *
-    `, [intern_id, date, check_out]);
-    return result.rows[0];
-  },
+checkOut: async ({ intern_id, date, check_out }) => {
+  const result = await pool.query(`
+    UPDATE attendance
+    SET 
+      check_out = $3,
+      source = 'admin',
+      total_hours = ROUND(
+        EXTRACT(EPOCH FROM ($3::time - check_in)) / 3600
+      , 2)
+    WHERE intern_id = $1 AND date = $2
+    RETURNING *
+  `, [intern_id, date, check_out]);
+  return result.rows[0];
+},
 
   mark: async ({ intern_id, date, status }) => {
     const result = await pool.query(`
@@ -70,6 +71,34 @@ const AttendanceModel = {
     `, [intern_id, date, status]);
     return result.rows[0];
   },
+
+  checkInSelf: async ({ intern_id, date, check_in, latitude, longitude }) => {
+  const result = await pool.query(`
+    INSERT INTO attendance (intern_id, date, status, check_in, source, latitude, longitude)
+    VALUES ($1, $2, 'present', $3, 'self', $4, $5)
+    ON CONFLICT (intern_id, date)
+    DO UPDATE SET check_in = $3, status = 'present', source = 'self', latitude = $4, longitude = $5
+    RETURNING *
+  `, [intern_id, date, check_in, latitude, longitude]);
+  return result.rows[0];
+},
+
+checkOutSelf: async ({ intern_id, date, check_out, latitude, longitude }) => {
+  const result = await pool.query(`
+    UPDATE attendance
+    SET 
+      check_out = $3,
+      source = 'self',
+      latitude = $4,
+      longitude = $5,
+      total_hours = ROUND(
+        EXTRACT(EPOCH FROM ($3::time - check_in)) / 3600
+      , 2)
+    WHERE intern_id = $1 AND date = $2
+    RETURNING *
+  `, [intern_id, date, check_out, latitude, longitude]);
+  return result.rows[0];
+},
 };
 
 module.exports = AttendanceModel;

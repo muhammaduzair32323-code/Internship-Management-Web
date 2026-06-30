@@ -109,6 +109,19 @@ const InternModel = {
     return result.rows[0];
   },
 
+  saveFaceDescriptor: async (id, descriptor) => {
+  const result = await pool.query(
+    'UPDATE interns SET face_descriptor = $1, face_verified = TRUE WHERE id = $2 RETURNING id, name, email, face_verified',
+    [JSON.stringify(descriptor), id]
+  );
+  return result.rows[0];
+},
+
+getFaceDescriptor: async (id) => {
+  const result = await pool.query('SELECT face_descriptor, face_verified FROM interns WHERE id = $1', [id]);
+  return result.rows[0];
+},
+
 };
 
 module.exports = InternModel;
