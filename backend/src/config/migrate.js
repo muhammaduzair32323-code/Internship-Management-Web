@@ -52,6 +52,30 @@ const migrate = async () => {
         comment TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS submissions (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        intern_id INTEGER REFERENCES interns(id) ON DELETE CASCADE,
+        notes TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'submitted',
+        score INTEGER,
+        feedback TEXT,
+        reviewed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS submission_files (
+        id SERIAL PRIMARY KEY,
+        submission_id INTEGER REFERENCES submissions(id) ON DELETE CASCADE,
+        file_name VARCHAR(255) NOT NULL,
+        storage_key VARCHAR(255) NOT NULL,
+        mime_type VARCHAR(150),
+        file_size INTEGER,
+        checksum_sha256 VARCHAR(64),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      ALTER TABLE interns ADD COLUMN IF NOT EXISTS slack_user_id VARCHAR(20);
     `);
     console.log('Migration successful');
     process.exit(0);

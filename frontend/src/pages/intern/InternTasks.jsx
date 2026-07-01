@@ -2,10 +2,29 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import submissionService from '../../services/submissionService';
 import Loader from '../../components/common/Loader';
+import Modal from '../../components/common/Modal';
 import { toast } from 'react-toastify';
 
 const priorityColor = { high: '#EF4444', medium: '#F59E0B', low: '#22C55E' };
+
+const ALLOWED_MIME = [
+  'application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv', 'application/zip',
+];
+const MAX_SIZE = 10 * 1024 * 1024;
+
+const statusBadgeStyle = {
+  submitted: { background: '#DBEAFE', color: '#1D4ED8' },
+  approved: { background: '#DCFCE7', color: '#16A34A' },
+  rejected: { background: '#FEE2E2', color: '#DC2626' },
+  revision_requested: { background: '#FEF9C3', color: '#CA8A04' },
+};
 
 const InternTasks = () => {
   const { intern, logout } = useAuth();
@@ -13,6 +32,11 @@ const InternTasks = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [submissionsByTask, setSubmissionsByTask] = useState({});
+  const [submitTask, setSubmitTask] = useState(null);
+  const [notes, setNotes] = useState('');
+  const [files, setFiles] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchTasks = () => {
     api.get('/intern/me')
@@ -21,7 +45,20 @@ const InternTasks = () => {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchTasks(); }, []);
+  const fetchSubmissions = () => {
+    submissionService.getAll({})
+      .then(res => {
+        const grouped = {};
+        (res.data.data || []).forEach(s => {
+          grouped[s.task_id] = grouped[s.task_id] || [];
+          grouped[s.task_id].push(s);
+        });
+        setSubmissionsByTask(grouped);
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => { fetchTasks(); fetchSubmissions(); }, []);
 
   const toggleDark = () => {
     const next = !dark;
@@ -41,6 +78,40 @@ const InternTasks = () => {
       toast.success('Task marked complete');
       fetchTasks();
     } catch (err) { toast.error(err.message); }
+  };
+
+  const openSubmit = (task) => {
+    setSubmitTask(task);
+    setNotes('');
+    setFiles([]);
+  };
+
+  const addFiles = (incoming) => {
+    const valid = Array.from(incoming).filter(f => {
+      if (!ALLOWED_MIME.includes(f.type)) { toast.error(`"${f.name}" is not an allowed file type.`); return false; }
+      if (f.size > MAX_SIZE) { toast.error(`"${f.name}" exceeds the 10 MB limit.`); return false; }
+      return true;
+    });
+    setFiles(prev => [...prev, ...valid]);
+  };
+
+  const handleSubmitWork = async () => {
+    if (!files.length) { toast.error('Attach at least one file'); return; }
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append('task_id', submitTask.id);
+      if (notes.trim()) fd.append('notes', notes.trim());
+      files.forEach(f => fd.append('files', f));
+      await submissionService.create(fd);
+      toast.success('Work submitted — supervisor notified');
+      setSubmitTask(null);
+      fetchSubmissions();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -96,6 +167,32 @@ const InternTasks = () => {
                       </span>
                     </div>
 
+                    {/* Submissions */}
+                    {(submissionsByTask[task.id] || []).length > 0 && (
+                      <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>
+                          Your submissions ({submissionsByTask[task.id].length})
+                        </div>
+                        {submissionsByTask[task.id].map(s => (
+                          <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <span style={{
+                              padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500,
+                              ...(statusBadgeStyle[s.status] || statusBadgeStyle.submitted),
+                            }}>
+                              {s.status.replace('_', ' ')}
+                            </span>
+                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                              {new Date(s.created_at).toLocaleDateString()}
+                              {s.score != null ? ` · Score: ${s.score}` : ''}
+                            </span>
+                            {s.feedback && (
+                              <span style={{ fontSize: 11, color: 'var(--text)' }}>— {s.feedback}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Comments */}
                     {task.comments && task.comments.length > 0 && (
                       <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
@@ -125,6 +222,9 @@ const InternTasks = () => {
                         Mark Done
                       </button>
                     )}
+                    <button onClick={() => openSubmit(task)} className="btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }}>
+                      Submit Work
+                    </button>
                   </div>
                 </div>
               </div>
@@ -132,6 +232,61 @@ const InternTasks = () => {
           </div>
         )}
       </div>
+
+      {submitTask && (
+        <Modal title={`Submit Work — ${submitTask.title}`} onClose={() => !submitting && setSubmitTask(null)}>
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text)' }}>
+              Notes <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span>
+            </label>
+            <textarea
+              rows={3}
+              className="form-input"
+              style={{ width: '100%', resize: 'vertical' }}
+              placeholder="Describe your work, approach, or anything the reviewer should know…"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: 'var(--text)' }}>
+              Files *
+            </label>
+            <input
+              type="file"
+              multiple
+              accept={ALLOWED_MIME.join(',')}
+              onChange={e => addFiles(e.target.files)}
+            />
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+              PDF, Word, Excel, images, CSV, ZIP — max 10 MB each
+            </div>
+            {files.length > 0 && (
+              <ul style={{ marginTop: 8, paddingLeft: 18, fontSize: 12, color: 'var(--text)' }}>
+                {files.map((f, i) => (
+                  <li key={i}>
+                    {f.name}
+                    <button
+                      onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+                      style={{ marginLeft: 8, border: 'none', background: 'none', color: '#EF4444', cursor: 'pointer' }}
+                    >
+                      remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button className="btn-ghost" onClick={() => setSubmitTask(null)} disabled={submitting}>Cancel</button>
+            <button className="btn-primary" onClick={handleSubmitWork} disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

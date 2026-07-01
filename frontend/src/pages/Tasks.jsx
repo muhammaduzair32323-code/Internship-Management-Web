@@ -6,8 +6,16 @@ import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import taskService from '../services/taskService';
 import internService from '../services/internService';
+import submissionService from '../services/submissionService';
 import { toast } from 'react-toastify';
 import '../styles/tasks.css';
+
+const statusBadgeClass = {
+  submitted: 'badge-warning',
+  approved: 'badge-success',
+  rejected: 'badge-danger',
+  revision_requested: 'badge-warning',
+};
 
 const Tasks = () => {
   const [tasks, setTasks] = useState([]);
@@ -23,6 +31,12 @@ const Tasks = () => {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
+  const [submissionTask, setSubmissionTask] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [reviewingId, setReviewingId] = useState(null);
+  const [reviewScore, setReviewScore] = useState('');
+  const [reviewFeedback, setReviewFeedback] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   const fetchTasks = useCallback(() => {
     setLoading(true);
@@ -118,6 +132,41 @@ const Tasks = () => {
     finally { setCommentLoading(false); }
   };
 
+  const openSubmissions = async (task) => {
+    setSubmissionTask(task);
+    setReviewingId(null);
+    try {
+      const res = await submissionService.getAll({ task_id: task.id });
+      setSubmissions(res.data.data);
+    } catch (err) { toast.error(err.message); }
+  };
+
+  const startReview = (submission) => {
+    setReviewingId(submission.id);
+    setReviewScore(submission.score ?? '');
+    setReviewFeedback(submission.feedback ?? '');
+  };
+
+  const handleReview = async (status) => {
+    setReviewBusy(true);
+    try {
+      await submissionService.review(reviewingId, {
+        status,
+        score: reviewScore === '' ? undefined : Number(reviewScore),
+        feedback: reviewFeedback.trim() || undefined,
+      });
+      toast.success('Submission reviewed — intern notified in Slack');
+      setReviewingId(null);
+      const res = await submissionService.getAll({ task_id: submissionTask.id });
+      setSubmissions(res.data.data);
+    } catch (err) { toast.error(err.message); }
+    finally { setReviewBusy(false); }
+  };
+
+  const handleDownload = (submission, file) => {
+    submissionService.download(submission.id, file.id, file.file_name).catch(err => toast.error(err.message));
+  };
+
   return (
     <MainLayout title="Tasks">
       <div className="page-header">
@@ -184,6 +233,7 @@ const Tasks = () => {
                       <button className="btn-edit" onClick={() => setEditTask(task)}>Edit</button>
                       <button className="btn-delete" onClick={() => setDeleteConfirm(task.id)}>Delete</button>
                       <button className="btn-view" onClick={() => openComments(task)}>Notes</button>
+                      <button className="btn-view" onClick={() => openSubmissions(task)}>Submissions</button>
                     </div>
                   </td>
                 </tr>
@@ -253,6 +303,66 @@ const Tasks = () => {
               {commentLoading ? '...' : 'Add'}
             </button>
           </div>
+        </Modal>
+      )}
+
+      {submissionTask && (
+        <Modal title={`Submissions — ${submissionTask.title}`} onClose={() => setSubmissionTask(null)}>
+          {submissions.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>No submissions yet.</p>
+          ) : (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {submissions.map(s => (
+                <div key={s.id} style={{ background: '#F8FAFC', borderRadius: 8, padding: '12px 14px', marginBottom: 10, borderLeft: '3px solid #4F46E5' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{s.intern_name}</span>
+                    <span className={`badge ${statusBadgeClass[s.status] || 'badge-warning'}`}>{s.status.replace('_', ' ')}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', margin: '4px 0' }}>
+                    {new Date(s.created_at).toLocaleString()}
+                  </div>
+                  {s.notes && <p style={{ margin: '6px 0', fontSize: 13 }}>{s.notes}</p>}
+                  {(s.files || []).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '6px 0' }}>
+                      {s.files.map(f => (
+                        <button key={f.id} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }}
+                          onClick={() => handleDownload(s, f)}>
+                          📎 {f.file_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {s.score != null && <div style={{ fontSize: 12 }}>Score: {s.score}</div>}
+                  {s.feedback && <div style={{ fontSize: 12, color: 'var(--muted)' }}>Feedback: {s.feedback}</div>}
+
+                  {reviewingId === s.id ? (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input
+                        className="form-input" type="number" min="0" max="100" placeholder="Score (0-100, optional)"
+                        value={reviewScore} onChange={e => setReviewScore(e.target.value)}
+                      />
+                      <textarea
+                        className="form-input" rows={2} placeholder="Feedback (optional)"
+                        value={reviewFeedback} onChange={e => setReviewFeedback(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-primary" disabled={reviewBusy} onClick={() => handleReview('approved')}>Approve</button>
+                        <button className="btn-delete" disabled={reviewBusy} onClick={() => handleReview('rejected')}>Reject</button>
+                        <button className="btn-edit" disabled={reviewBusy} onClick={() => handleReview('revision_requested')}>Request Revision</button>
+                        <button className="btn-ghost" disabled={reviewBusy} onClick={() => setReviewingId(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    ['submitted', 'revision_requested'].includes(s.status) && (
+                      <button className="btn-edit" style={{ marginTop: 8, fontSize: 12 }} onClick={() => startReview(s)}>
+                        Review
+                      </button>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
     </MainLayout>
