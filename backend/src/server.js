@@ -20,6 +20,10 @@ app.use('/api/intern', require('./routes/internPortalRoutes'));
 app.use('/api/tasks', authMiddleware, require('./routes/taskRoutes'));
 app.use('/api/attendance', authMiddleware, require('./routes/attendanceRoutes'));
 app.use('/api/dashboard', authMiddleware, require('./routes/dashboardRoutes'));
+app.use('/api/submissions', authMiddleware, require('./routes/submissionRoutes'));
+app.use('/api/intern/slack', authMiddleware, require('./routes/slackConnectRoutes'));
+// Public — Slack redirects the bare browser here, no Authorization header available.
+app.use('/api/slack/oauth', require('./routes/slackOauthRoutes'));
 
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

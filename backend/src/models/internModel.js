@@ -122,6 +122,19 @@ getFaceDescriptor: async (id) => {
   return result.rows[0];
 },
 
+  saveSlackUserId: async (id, slackUserId) => {
+    const result = await pool.query(
+      'UPDATE interns SET slack_user_id = $1 WHERE id = $2 RETURNING id, name, slack_user_id',
+      [slackUserId, id]
+    );
+    return result.rows[0];
+  },
+
+  getSlackUserId: async (id) => {
+    const result = await pool.query('SELECT slack_user_id FROM interns WHERE id = $1', [id]);
+    return result.rows[0]?.slack_user_id || null;
+  },
+
 };
 
 module.exports = InternModel;

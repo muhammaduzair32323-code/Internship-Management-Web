@@ -9,6 +9,7 @@ const internPortalService = {
     api.post('/intern/attendance/check-in', { descriptor, latitude, longitude }),
   checkOutSelf: (descriptor, latitude, longitude) =>
     api.post('/intern/attendance/check-out', { descriptor, latitude, longitude }),
+  disconnectSlack: () => api.post('/intern/slack/disconnect'),
 };
 
 export default internPortalService;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import internPortalService from '../../services/internPortalService';
 import Loader from '../../components/common/Loader';
@@ -43,15 +43,60 @@ const InternNavbar = ({ name, onLogout, navigate }) => {
 const InternDashboard = () => {
   const { intern, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [connectingSlack, setConnectingSlack] = useState(false);
+  const [disconnectingSlack, setDisconnectingSlack] = useState(false);
 
-  useEffect(() => {
+  const fetchMe = () => {
     api.get('/intern/me')
       .then(res => setData(res.data.data))
       .catch(err => toast.error(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchMe(); }, []);
+
+  // Land here after the Slack OAuth redirect (?slack=connected|denied|error|invalid_state)
+  useEffect(() => {
+    const result = searchParams.get('slack');
+    if (!result) return;
+    const messages = {
+      connected: ['success', 'Slack connected — you\'ll get DMs when your submissions are reviewed'],
+      denied: ['error', 'Slack connection was cancelled'],
+      invalid_state: ['error', 'Slack connection expired — try again'],
+      error: ['error', 'Could not connect Slack — try again'],
+    };
+    const [kind, message] = messages[result] || ['error', 'Something went wrong connecting Slack'];
+    toast[kind](message);
+    setSearchParams({}, { replace: true });
+    if (result === 'connected') fetchMe();
+  }, [searchParams]);
+
+  const handleConnectSlack = async () => {
+    setConnectingSlack(true);
+    try {
+      const res = await api.get('/intern/slack/connect');
+      window.location.href = res.data.data.url;
+    } catch (err) {
+      toast.error(err.message);
+      setConnectingSlack(false);
+    }
+  };
+
+  const handleDisconnectSlack = async () => {
+    setDisconnectingSlack(true);
+    try {
+      await internPortalService.disconnectSlack();
+      toast.success('Slack disconnected');
+      fetchMe();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setDisconnectingSlack(false);
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('theme') || 'light';
@@ -83,6 +128,26 @@ const InternDashboard = () => {
       <div className="intern-content">
         <h2 style={{ color: 'var(--text)', marginBottom: 4 }}>Welcome back, {intern?.name} 👋</h2>
         <p style={{ color: 'var(--muted)', marginBottom: 24 }}>{intern?.department}</p>
+
+        <div className="intern-card" style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ color: 'var(--text)', fontSize: 15, marginBottom: 4 }}>Slack notifications</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, margin: 0 }}>
+              {data.intern?.slack_user_id
+                ? 'Connected — you\'ll get a DM when a submission is reviewed.'
+                : 'Connect Slack to get DMed the moment a supervisor reviews your work.'}
+            </p>
+          </div>
+          {data.intern?.slack_user_id ? (
+            <button className="btn-ghost" onClick={handleDisconnectSlack} disabled={disconnectingSlack}>
+              {disconnectingSlack ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          ) : (
+            <button className="btn-primary" onClick={handleConnectSlack} disabled={connectingSlack}>
+              {connectingSlack ? 'Redirecting…' : 'Connect Slack'}
+            </button>
+          )}
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
           {[

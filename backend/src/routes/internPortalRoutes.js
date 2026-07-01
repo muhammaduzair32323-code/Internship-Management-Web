@@ -122,7 +122,7 @@ router.post('/attendance/check-out', authMiddleware, internOnly, async (req, res
 router.get('/me', authMiddleware, internOnly, async (req, res, next) => {
     try {
         const id = req.user.id;
-        const intern = await pool.query('SELECT id,name,email,department,joining_date,status FROM interns WHERE id=$1', [id]);
+        const intern = await pool.query('SELECT id,name,email,department,joining_date,status,slack_user_id FROM interns WHERE id=$1', [id]);
         const tasks = await pool.query(`
   SELECT t.*, 
     COALESCE(
